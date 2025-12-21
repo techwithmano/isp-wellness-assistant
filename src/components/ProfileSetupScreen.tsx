@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export interface ProfileData {
   name: string;
   age: string;
   gender: string;
+  schoolEmail: string;
   medicalConditions: string;
 }
 
@@ -14,15 +15,56 @@ interface ProfileSetupScreenProps {
   onBack: () => void;
 }
 
-export default function ProfileSetupScreen({ onNext, onBack }: ProfileSetupScreenProps) {
-  const [formData, setFormData] = useState<ProfileData>({
-    name: '',
-    age: '',
-    gender: '',
-    medicalConditions: '',
-  });
+const STORAGE_KEY = 'isp-wellness-profile';
 
-  const [errors, setErrors] = useState<Partial<ProfileData>>({});
+export default function ProfileSetupScreen({ onNext, onBack }: ProfileSetupScreenProps) {
+  // Load profile from localStorage on mount
+  const loadProfileFromStorage = (): ProfileData => {
+    if (typeof window === 'undefined') {
+      return {
+        name: '',
+        age: '',
+        gender: '',
+        schoolEmail: '',
+        medicalConditions: '',
+      };
+    }
+
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return {
+          name: parsed.name || '',
+          age: parsed.age || '',
+          gender: parsed.gender || '',
+          schoolEmail: parsed.schoolEmail || '',
+          medicalConditions: parsed.medicalConditions || '',
+        };
+      }
+    } catch (error) {
+      console.error('Error loading profile from localStorage:', error);
+    }
+
+    return {
+      name: '',
+      age: '',
+      gender: '',
+      schoolEmail: '',
+      medicalConditions: '',
+    };
+  };
+
+  const [formData, setFormData] = useState<ProfileData>(loadProfileFromStorage);
+  const [errors, setErrors] = useState<Partial<Record<keyof ProfileData, string>>>({});
+
+  // Load profile on mount
+  useEffect(() => {
+    const savedProfile = loadProfileFromStorage();
+    if (savedProfile.name || savedProfile.age || savedProfile.gender) {
+      setFormData(savedProfile);
+    }
+  }, []);
 
   const handleChange = (field: keyof ProfileData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -31,8 +73,14 @@ export default function ProfileSetupScreen({ onNext, onBack }: ProfileSetupScree
     }
   };
 
+  const validateEmail = (email: string): boolean => {
+    if (!email.trim()) return false;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
   const validate = (): boolean => {
-    const newErrors: Partial<ProfileData> = {};
+    const newErrors: Partial<Record<keyof ProfileData, string>> = {};
     
     if (!formData.name.trim()) {
       newErrors.name = 'Name is required';
@@ -47,6 +95,13 @@ export default function ProfileSetupScreen({ onNext, onBack }: ProfileSetupScree
     if (!formData.gender) {
       newErrors.gender = 'Please select a gender';
     }
+
+    // School email validation (required)
+    if (!formData.schoolEmail.trim()) {
+      newErrors.schoolEmail = 'School email is required';
+    } else if (!validateEmail(formData.schoolEmail)) {
+      newErrors.schoolEmail = 'Please enter a valid email address';
+    }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -55,6 +110,12 @@ export default function ProfileSetupScreen({ onNext, onBack }: ProfileSetupScree
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (validate()) {
+      // Save to localStorage
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
+      } catch (error) {
+        console.error('Error saving profile to localStorage:', error);
+      }
       onNext(formData);
     }
   };
@@ -67,7 +128,7 @@ export default function ProfileSetupScreen({ onNext, onBack }: ProfileSetupScree
             Profile Setup
           </h2>
           
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form id="profile-form" onSubmit={handleSubmit} className="space-y-6">
             {/* Name */}
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-foreground mb-2">
@@ -121,6 +182,25 @@ export default function ProfileSetupScreen({ onNext, onBack }: ProfileSetupScree
               {errors.gender && <p className="mt-1 text-sm text-destructive">{errors.gender}</p>}
             </div>
 
+            {/* School Email */}
+            <div>
+              <label htmlFor="schoolEmail" className="block text-sm font-medium text-foreground mb-2">
+                School Email *
+              </label>
+              <input
+                id="schoolEmail"
+                type="email"
+                value={formData.schoolEmail}
+                onChange={(e) => handleChange('schoolEmail', e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border-2 border-border bg-background text-foreground text-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                placeholder="yourname@school.edu"
+              />
+              {errors.schoolEmail && <p className="mt-1 text-sm text-destructive">{errors.schoolEmail}</p>}
+              {!errors.schoolEmail && formData.schoolEmail && !formData.schoolEmail.toLowerCase().includes('.edu') && (
+                <p className="mt-1 text-sm text-muted-foreground">💡 Tip: School emails typically end with .edu</p>
+              )}
+            </div>
+
             {/* Medical Conditions */}
             <div>
               <label htmlFor="medicalConditions" className="block text-sm font-medium text-foreground mb-2">
@@ -147,7 +227,8 @@ export default function ProfileSetupScreen({ onNext, onBack }: ProfileSetupScree
             Back
           </button>
           <button
-            onClick={handleSubmit}
+            type="submit"
+            form="profile-form"
             className="flex-1 py-4 px-6 bg-primary text-primary-foreground text-lg font-semibold rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 active:scale-95"
           >
             Next

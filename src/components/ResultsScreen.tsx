@@ -7,9 +7,12 @@ import { symptomAnalysis, SymptomAnalysisOutput } from '@/ai/flows/symptom-analy
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Download } from 'lucide-react';
+import { saveTestResult } from '@/lib/firebase-service';
+import { UserProfile } from '@/lib/firebase-service';
 
 interface ResultsScreenProps {
   profile: ProfileData;
+  userProfile: UserProfile | null;
   symptoms: string;
   questions: Question[];
   answers: string[];
@@ -18,6 +21,7 @@ interface ResultsScreenProps {
 
 export default function ResultsScreen({
   profile,
+  userProfile,
   symptoms,
   questions,
   answers,
@@ -26,6 +30,7 @@ export default function ResultsScreen({
   const [conditions, setConditions] = useState<SymptomAnalysisOutput | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(true);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     const performAnalysis = async () => {
@@ -46,6 +51,39 @@ export default function ResultsScreen({
 
         setConditions(result);
         setIsAnalyzing(false);
+
+        // Save test result to Firebase
+        if (userProfile && userProfile.id) {
+          try {
+            setIsSaving(true);
+            await saveTestResult({
+              userId: userProfile.id,
+              userEmail: profile.schoolEmail.toLowerCase().trim(),
+              profile: profile,
+              symptoms: symptoms || '',
+              questions: questions.map(q => {
+                const questionData: any = {
+                  id: q.id,
+                  text: q.text || '',
+                  type: q.type || '',
+                };
+                // Only include options if they exist and are not undefined
+                if (q.options && q.options.length > 0) {
+                  questionData.options = q.options;
+                }
+                return questionData;
+              }),
+              answers: answers || [],
+              conditions: result || null,
+            });
+            console.log('Test result saved to Firebase');
+          } catch (error) {
+            console.error('Error saving test result:', error);
+            // Don't show error to user - test result display is more important
+          } finally {
+            setIsSaving(false);
+          }
+        }
       } catch (error) {
         console.error('Error analyzing symptoms:', error);
         setAnalysisError('Unable to analyze symptoms. Please try again.');
@@ -133,6 +171,7 @@ export default function ResultsScreen({
       ['Name', profile.name],
       ['Age', profile.age],
       ['Gender', profile.gender],
+      ...(profile.schoolEmail ? [['School Email', profile.schoolEmail]] : []),
       ['Report Date', new Date().toLocaleDateString()],
     ];
 
@@ -339,6 +378,11 @@ export default function ResultsScreen({
               <p className="text-foreground">
                 <span className="font-medium">Gender:</span> {profile.gender}
               </p>
+              {profile.schoolEmail && (
+                <p className="text-foreground">
+                  <span className="font-medium">School Email:</span> {profile.schoolEmail}
+                </p>
+              )}
               {profile.medicalConditions && (
                 <p className="text-foreground">
                   <span className="font-medium">Medical Conditions:</span>{' '}

@@ -1,24 +1,33 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import WelcomeScreen from './WelcomeScreen';
 import ProfileSetupScreen, { ProfileData } from './ProfileSetupScreen';
+import ProfileEditScreen from './ProfileEditScreen';
+import HistoryScreen from './HistoryScreen';
+import TestResultViewScreen from './TestResultViewScreen';
 import SymptomInputScreen from './SymptomInputScreen';
 import DynamicQuestionScreen, { Question } from './DynamicQuestionScreen';
 import ResultsScreen from './ResultsScreen';
 import { generateAdaptiveQuestionGroq } from '@/ai/flows/generate-adaptive-question-groq';
 import Loading from './Loading';
+import { User } from 'lucide-react';
+import { getUserProfileByEmail, UserProfile, TestResult } from '@/lib/firebase-service';
 
-type Screen = 'welcome' | 'profile' | 'symptoms' | 'questions' | 'results' | 'loading';
+type Screen = 'welcome' | 'profile' | 'profile-edit' | 'history' | 'test-result' | 'symptoms' | 'questions' | 'results' | 'loading';
 
 export default function ISPWellnessApp() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('welcome');
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [symptoms, setSymptoms] = useState<string>('');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<string[]>([]);
-  const [loadingMessage, setLoadingMessage] = useState<string>('Generating your personalized question...');
+  const [loadingMessage, setLoadingMessage] = useState<string>('Loading your profile...');
+  const [emailError, setEmailError] = useState<string>('');
+  const [isLoadingProfile, setIsLoadingProfile] = useState<boolean>(false);
+  const [selectedTestResult, setSelectedTestResult] = useState<TestResult | null>(null);
 
   const TOTAL_QUESTIONS = 10;
 
@@ -94,17 +103,88 @@ export default function ISPWellnessApp() {
     return 'yesno'; // Default fallback
   };
 
-  const handleStart = () => {
-    setCurrentScreen('profile');
+  const handleEmailSubmit = async (email: string) => {
+    setIsLoadingProfile(true);
+    setEmailError('');
+    setLoadingMessage('Loading your profile...');
+    setCurrentScreen('loading');
+
+    try {
+      const userProfile = await getUserProfileByEmail(email);
+      
+      if (!userProfile) {
+        setEmailError('No profile found with this email. Please contact your school coordinator to set up your profile.');
+        setCurrentScreen('welcome');
+        setIsLoadingProfile(false);
+        return;
+      }
+
+      // Convert Firebase profile to ProfileData format
+      const profileData: ProfileData = {
+        name: userProfile.name,
+        age: userProfile.age,
+        gender: userProfile.gender,
+        schoolEmail: userProfile.schoolEmail,
+        medicalConditions: userProfile.medicalConditions || '',
+      };
+
+      setProfile(profileData);
+      setUserProfile(userProfile); // Store full UserProfile with ID for updates
+      setCurrentScreen('symptoms');
+    } catch (error: any) {
+      console.error('Error loading profile:', error);
+      setEmailError(error.message || 'Failed to load profile. Please try again.');
+      setCurrentScreen('welcome');
+    } finally {
+      setIsLoadingProfile(false);
+    }
   };
 
-  const handleProfileNext = (profileData: ProfileData) => {
-    setProfile(profileData);
-    setCurrentScreen('symptoms');
+  const handleProfileIconClick = () => {
+    if (profile && userProfile) {
+      setCurrentScreen('profile-edit');
+    }
   };
 
-  const handleProfileBack = () => {
-    setCurrentScreen('welcome');
+  const handleProfileSave = (updatedProfile: ProfileData) => {
+    setProfile(updatedProfile);
+    // Update userProfile as well to keep them in sync
+    if (userProfile) {
+      setUserProfile({
+        ...userProfile,
+        ...updatedProfile,
+      });
+    }
+  };
+
+  const handleProfileEditBack = () => {
+    // Go back to the previous screen (symptoms, questions, or results)
+    if (symptoms) {
+      if (questions.length > 0) {
+        setCurrentScreen('questions');
+      } else {
+        setCurrentScreen('symptoms');
+      }
+    } else {
+      setCurrentScreen('symptoms');
+    }
+  };
+
+  const handleViewHistory = () => {
+    setCurrentScreen('history');
+  };
+
+  const handleViewTestResult = (testResult: TestResult) => {
+    setSelectedTestResult(testResult);
+    setCurrentScreen('test-result');
+  };
+
+  const handleHistoryBack = () => {
+    setCurrentScreen('profile-edit');
+  };
+
+  const handleTestResultBack = () => {
+    setCurrentScreen('history');
   };
 
   const handleSymptomsNext = async (symptomsData: string) => {
@@ -201,7 +281,7 @@ export default function ISPWellnessApp() {
   };
 
   const handleSymptomsBack = () => {
-    setCurrentScreen('profile');
+    setCurrentScreen('welcome');
   };
 
   const handleQuestionAnswer = async (answer: string) => {
@@ -389,14 +469,59 @@ export default function ISPWellnessApp() {
 
   const currentQuestion = questions[currentQuestionIndex - 1];
 
+  const userInitial = profile?.name?.charAt(0).toUpperCase() || '';
+  
+  // Show profile icon on all screens except loading, welcome, profile-edit, history, and test-result (only show when profile is loaded)
+  const showProfileIcon = currentScreen !== 'loading' && currentScreen !== 'welcome' && currentScreen !== 'profile-edit' && currentScreen !== 'history' && currentScreen !== 'test-result' && profile !== null;
+
   return (
-    <div className="min-h-screen w-full bg-background">
-      {currentScreen === 'welcome' && <WelcomeScreen onStart={handleStart} />}
-      
-      {currentScreen === 'profile' && (
-        <ProfileSetupScreen
-          onNext={handleProfileNext}
-          onBack={handleProfileBack}
+    <div className="min-h-screen w-full bg-background relative">
+      {/* Profile Icon Button - Top Right */}
+      {showProfileIcon && (
+        <button
+          onClick={handleProfileIconClick}
+          className="fixed top-4 right-4 z-50 w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg hover:shadow-xl transform hover:scale-110 transition-all duration-200 active:scale-95"
+          aria-label="View Profile"
+          title={profile?.name ? `${profile.name}'s Profile` : 'View Profile'}
+        >
+          {userInitial ? (
+            <span className="text-lg font-semibold">{userInitial}</span>
+          ) : (
+            <User className="w-6 h-6" />
+          )}
+        </button>
+      )}
+
+      {currentScreen === 'welcome' && (
+        <WelcomeScreen 
+          onEmailSubmit={handleEmailSubmit}
+          isLoading={isLoadingProfile}
+          error={emailError}
+        />
+      )}
+
+      {currentScreen === 'profile-edit' && profile && userProfile && (
+        <ProfileEditScreen
+          profile={profile}
+          userProfile={userProfile}
+          onSave={handleProfileSave}
+          onBack={handleProfileEditBack}
+          onViewHistory={handleViewHistory}
+        />
+      )}
+
+      {currentScreen === 'history' && profile && (
+        <HistoryScreen
+          userEmail={profile.schoolEmail}
+          onBack={handleHistoryBack}
+          onViewResult={handleViewTestResult}
+        />
+      )}
+
+      {currentScreen === 'test-result' && selectedTestResult && (
+        <TestResultViewScreen
+          testResult={selectedTestResult}
+          onBack={handleTestResultBack}
         />
       )}
       
@@ -427,6 +552,7 @@ export default function ISPWellnessApp() {
       {currentScreen === 'results' && profile && (
         <ResultsScreen
           profile={profile}
+          userProfile={userProfile}
           symptoms={symptoms}
           questions={questions}
           answers={answers}

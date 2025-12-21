@@ -1,12 +1,38 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 
 interface WelcomeScreenProps {
-  onStart: () => void;
+  onEmailSubmit: (email: string) => void;
+  isLoading?: boolean;
+  error?: string;
 }
 
-export default function WelcomeScreen({ onStart }: WelcomeScreenProps) {
+export default function WelcomeScreen({ onEmailSubmit, isLoading = false, error }: WelcomeScreenProps) {
+  const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
+
+  const validateEmail = (email: string): boolean => {
+    if (!email.trim()) {
+      setEmailError('School email is required');
+      return false;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setEmailError('Please enter a valid email address');
+      return false;
+    }
+    setEmailError('');
+    return true;
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (validateEmail(email)) {
+      onEmailSubmit(email.trim().toLowerCase());
+    }
+  };
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen px-6 py-12 animate-fadeIn">
       <div className="w-full max-w-md mx-auto flex flex-col items-center">
@@ -25,17 +51,43 @@ export default function WelcomeScreen({ onStart }: WelcomeScreenProps) {
         </h1>
         
         {/* Subtitle */}
-        <p className="text-lg sm:text-xl text-muted-foreground mb-12 text-center">
+        <p className="text-lg sm:text-xl text-muted-foreground mb-8 text-center">
           Your friendly wellness companion.
         </p>
-        
-        {/* Start Button */}
-        <button
-          onClick={onStart}
-          className="w-full max-w-xs py-4 px-8 bg-primary text-primary-foreground text-lg sm:text-xl font-semibold rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 active:scale-95"
-        >
-          Start
-        </button>
+
+        {/* Email Form */}
+        <form onSubmit={handleSubmit} className="w-full max-w-xs space-y-4">
+          <div>
+            <label htmlFor="schoolEmail" className="block text-sm font-medium text-foreground mb-2">
+              School Email *
+            </label>
+            <input
+              id="schoolEmail"
+              type="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (emailError) setEmailError('');
+              }}
+              disabled={isLoading}
+              className="w-full px-4 py-3 rounded-xl border-2 border-border bg-background text-foreground text-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              placeholder="yourname@school.edu"
+            />
+            {(emailError || error) && (
+              <p className="mt-1 text-sm text-destructive">
+                {emailError || error}
+              </p>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full py-4 px-8 bg-primary text-primary-foreground text-lg sm:text-xl font-semibold rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+          >
+            {isLoading ? 'Loading...' : 'Start'}
+          </button>
+        </form>
       </div>
     </div>
   );

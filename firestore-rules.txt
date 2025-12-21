@@ -1,0 +1,18 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow all reads (for email lookups)
+    match /users/{userId} {
+      allow read: if true;
+      allow update: if true; // Profile updates
+      allow create: if false; // Only admins create
+    }
+    
+    // Test results - allow all reads and creates
+    match /testResults/{testId} {
+      allow read, create: if true;
+      allow update, delete: if false;
+    }
+  }
+}
+
