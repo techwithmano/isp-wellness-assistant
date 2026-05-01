@@ -1,8 +1,3 @@
-**GitHub Description:**  
-A customized wellness and health tracking application built for the ISP institution, featuring GenAI assessments, Firebase integration, and Clerk Auth.
-
----
-
 # 🌿 ISP Wellness Assistant
 
 ## 📖 Overview
